@@ -1,0 +1,25 @@
+[defines]
+  INF_VERSION = 0x00010005 
+  BASE_NAME = SmmApp
+  FILE_GUID = F446602F-7B67-4E26-BCCA-D849E0E09D86
+  MODULE_TYPE = DXE_SMM_DRIVER
+  PI_SPECIFICATION_VERSION = 0x0001000A
+  ENTRY_POINT = SmmAppMain
+
+[Sources]
+  src/main.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  OvmfPkg/OvmfPkg.dec
+
+[LibraryClasses]
+  DebugLib
+  MmServicesTableLib
+  UefiDriverEntryPoint
+
+[Protocols]
+  gEfiMmCpuIoProtocolGuid
+
+[Depex]
+  gEfiMmCpuIoProtocolGuid
