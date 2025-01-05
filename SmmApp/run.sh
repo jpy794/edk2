@@ -9,7 +9,7 @@ qemu-system-x86_64 \
     -debugcon file:debug.log \
     -global isa-debugcon.iobase=0x402 \
     -m 4G \
-    -smp 4 \
+    -smp 1 \
     -enable-kvm \
     -machine q35,smm=on,accel=kvm \
     -nographic

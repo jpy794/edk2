@@ -16,10 +16,13 @@
 [LibraryClasses]
   DebugLib
   MmServicesTableLib
+  SmmServicesTableLib
   UefiDriverEntryPoint
 
 [Protocols]
   gEfiMmCpuIoProtocolGuid
+  gEfiSmmCpuProtocolGuid
 
 [Depex]
-  gEfiMmCpuIoProtocolGuid
+  gEfiMmCpuIoProtocolGuid AND
+  gEfiSmmCpuProtocolGuid

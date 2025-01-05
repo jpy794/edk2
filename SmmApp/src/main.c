@@ -2,12 +2,15 @@
 #include <Library/BaseLib.h>             // CpuDeadLoop()
 #include <Library/DebugLib.h>            // DEBUG()
 #include <Library/MmServicesTableLib.h>  // gMmst
+#include <Library/SmmServicesTableLib.h> // gSmst
 #include <Protocol/MmCpuIo.h>            // EFI_MM_CPU_IO_PROTOCOL
+#include <Protocol/SmmCpu.h>             // EFI_SMM_CPU_PROTOCOL
 
 #define ICH9_APM_CNT_SMM_APP 0x05
 
 STATIC EFI_HANDLE mDispatchHandle;
 STATIC EFI_MM_CPU_IO_PROTOCOL *mMmCpuIo;
+STATIC EFI_SMM_CPU_PROTOCOL *mSmmCpu;
 
 STATIC
 EFI_STATUS
@@ -18,6 +21,9 @@ SmmAppMmi(
 ) {
     EFI_STATUS Status;
     UINT8 ApmControl;
+    UINTN CpuIndex;
+    UINT64 Rdi;
+    UINT64 Rsi;
 
     //
     // Assert that we are entering this function due to our root MMI handler
@@ -56,6 +62,32 @@ SmmAppMmi(
 
     DEBUG((DEBUG_INFO, "%a(): smi\n", __FUNCTION__));
 
+    // FIXME: force use single core
+    CpuIndex = 0;
+    Status = mSmmCpu->ReadSaveState(
+        mSmmCpu, sizeof(Rdi), EFI_SMM_SAVE_STATE_REGISTER_RDI, CpuIndex, &Rdi
+    );
+
+    if (!EFI_ERROR(Status)) {
+        DEBUG(
+            (DEBUG_INFO, "smi: Rdi: 0x%lx, *Rdi: 0x%lx\n", Rdi, *(UINT64 *)Rdi)
+        );
+    } else {
+        DEBUG((DEBUG_ERROR, "smi: failed to read Rdi\n"));
+    }
+
+    Status = mSmmCpu->ReadSaveState(
+        mSmmCpu, sizeof(Rsi), EFI_SMM_SAVE_STATE_REGISTER_RSI, CpuIndex, &Rsi
+    );
+
+    if (!EFI_ERROR(Status)) {
+        DEBUG((DEBUG_INFO, "smi: Rdi: 0x%lx\n", Rsi));
+    } else {
+        DEBUG((DEBUG_ERROR, "smi: failed to read Rsi\n"));
+    }
+
+    // use rdi and rsi here
+
     //
     // We've handled this MMI.
     //
@@ -75,6 +107,15 @@ SmmAppMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable) {
     EFI_STATUS Status;
 
     DEBUG((DEBUG_INFO, "%a(): enter\n", __FUNCTION__));
+
+    // Locate the SMM CPU Protocol
+    Status = gSmst->SmmLocateProtocol(
+        &gEfiSmmCpuProtocolGuid, NULL, (VOID **)&mSmmCpu
+    );
+    if (EFI_ERROR(Status)) {
+        DEBUG((DEBUG_ERROR, "%a: locate SmmCpu: %r\n", __func__, Status));
+        goto Fatal;
+    }
 
     //
     // Errors from here on are fatal; we cannot allow the boot to proceed if we

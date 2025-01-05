@@ -91,7 +91,7 @@ IsUefiPageNotPresent (
     case EfiLoaderData:
     case EfiBootServicesCode:
     case EfiBootServicesData:
-    case EfiConventionalMemory:
+    // case EfiConventionalMemory:
     case EfiUnusableMemory:
     case EfiACPIReclaimMemory:
       return TRUE;
