@@ -8,9 +8,51 @@
 
 #define ICH9_APM_CNT_SMM_APP 0x05
 
+#define SMM_APP_MMI_SERVICE 0x01
+#define SMM_APP_MMI_UPDATE 0x02
+
 STATIC EFI_HANDLE mDispatchHandle;
 STATIC EFI_MM_CPU_IO_PROTOCOL *mMmCpuIo;
 STATIC EFI_SMM_CPU_PROTOCOL *mSmmCpu;
+
+STATIC
+EFI_STATUS
+EFIAPI
+HandleService(UINT64 Arg0, UINT64 Arg1) {
+    DEBUG((DEBUG_INFO, "smi: serving\n"));
+    // TODO: fake a service here
+    return EFI_SUCCESS;
+}
+
+STATIC
+EFI_STATUS
+EFIAPI
+HandleUpdate(UINT64 Arg0, UINT64 Arg1) {
+    DEBUG((DEBUG_INFO, "smi: updating\n"));
+    // TODO: do service update here
+    return EFI_SUCCESS;
+}
+
+STATIC
+EFI_STATUS
+EFIAPI
+ReadSaveRegister(IN EFI_MM_SAVE_STATE_REGISTER Register, OUT UINT64 *Value) {
+    EFI_STATUS Status;
+    UINTN CpuIndex;
+
+    // FIXME: force use single core
+    CpuIndex = 0;
+
+    Status = mSmmCpu->ReadSaveState(
+        mSmmCpu, sizeof(UINT64), Register, CpuIndex, Value
+    );
+
+    if (EFI_ERROR(Status)) {
+        DEBUG((DEBUG_ERROR, "smi: failed to read Rdi\n"));
+        return Status;
+    }
+    return EFI_SUCCESS;
+}
 
 STATIC
 EFI_STATUS
@@ -21,9 +63,9 @@ SmmAppMmi(
 ) {
     EFI_STATUS Status;
     UINT8 ApmControl;
-    UINTN CpuIndex;
     UINT64 Rdi;
     UINT64 Rsi;
+    UINT64 R10;
 
     //
     // Assert that we are entering this function due to our root MMI handler
@@ -62,31 +104,36 @@ SmmAppMmi(
 
     DEBUG((DEBUG_INFO, "%a(): smi\n", __FUNCTION__));
 
-    // FIXME: force use single core
-    CpuIndex = 0;
-    Status = mSmmCpu->ReadSaveState(
-        mSmmCpu, sizeof(Rdi), EFI_SMM_SAVE_STATE_REGISTER_RDI, CpuIndex, &Rdi
-    );
-
-    if (!EFI_ERROR(Status)) {
-        DEBUG(
-            (DEBUG_INFO, "smi: Rdi: 0x%lx, *Rdi: 0x%lx\n", Rdi, *(UINT64 *)Rdi)
-        );
-    } else {
-        DEBUG((DEBUG_ERROR, "smi: failed to read Rdi\n"));
+    Status = ReadSaveRegister(EFI_SMM_SAVE_STATE_REGISTER_RDI, &Rdi);
+    if (EFI_ERROR(Status)) {
+        goto Fatal;
+    }
+    Status = ReadSaveRegister(EFI_SMM_SAVE_STATE_REGISTER_RSI, &Rsi);
+    if (EFI_ERROR(Status)) {
+        goto Fatal;
+    }
+    Status = ReadSaveRegister(EFI_SMM_SAVE_STATE_REGISTER_R10, &R10);
+    if (EFI_ERROR(Status)) {
+        goto Fatal;
     }
 
-    Status = mSmmCpu->ReadSaveState(
-        mSmmCpu, sizeof(Rsi), EFI_SMM_SAVE_STATE_REGISTER_RSI, CpuIndex, &Rsi
-    );
-
-    if (!EFI_ERROR(Status)) {
-        DEBUG((DEBUG_INFO, "smi: Rdi: 0x%lx\n", Rsi));
-    } else {
-        DEBUG((DEBUG_ERROR, "smi: failed to read Rsi\n"));
+    switch (Rdi) {
+    case SMM_APP_MMI_SERVICE:
+        Status = HandleService(Rsi, R10);
+        if (EFI_ERROR(Status)) {
+            goto Fatal;
+        }
+        break;
+    case SMM_APP_MMI_UPDATE:
+        Status = HandleUpdate(Rsi, R10);
+        if (EFI_ERROR(Status)) {
+            goto Fatal;
+        }
+        break;
+    default:
+        DEBUG((DEBUG_INFO, "smi: invalid smm app mmi id\n"));
+        break;
     }
-
-    // use rdi and rsi here
 
     //
     // We've handled this MMI.

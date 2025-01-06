@@ -60,15 +60,27 @@ uint64_t virt_to_phys(void *virt_addr) {
 #define PORT 0xb2
 #define SMM_APP 0x05
 
-void smm_call(void *addr, size_t len) {
+#define SMM_APP_MMI_SERVICE 0x01
+#define SMM_APP_MMI_UPDATE 0x02
+
+void smm_call(uint64_t mmi_id, uint64_t arg0, uint64_t arg1) {
+    asm volatile("mov %0, %%rdi\n\t"
+                 "mov %1, %%rsi\n\t"
+                 "mov %2, %%r10\n\t"
+                 "outb %b3, %w4"
+                 :
+                 : "r"(mmi_id), "r"(arg0), "r"(arg1), "a"(SMM_APP), "Nd"(PORT)
+                 : "rdi", "rsi", "r10", "memory");
+}
+
+void smm_service() {
+    // TODO: fake service
+    smm_call(SMM_APP_MMI_SERVICE, 0, 0);
+}
+
+void smm_update(void *addr, size_t len) {
     uint64_t pa = virt_to_phys(addr);
-    asm volatile("mov %0, %%rdi\n\t" // 将变量 addr 的值放入 rdi
-                 "mov %1, %%rsi\n\t" // 将变量 len 的值放入 rsi
-                 "outb %b2, %w3"     // 执行 outb 指令
-                 :                   // 没有输出操作数
-                 : "r"(pa), "r"(len), "a"(SMM_APP), "Nd"(PORT) // 输入操作数
-                 : "rdi", "rsi", "memory" // 告诉编译器 rdi 和内存可能被修改
-    );
+    smm_call(SMM_APP_MMI_UPDATE, pa, len);
 }
 
 int main() {
@@ -83,7 +95,8 @@ int main() {
 
     size_t val = 10;
     size_t len = 1;
-    smm_call(&val, len);
+    smm_update(&val, len);
+    smm_service();
 
     // 释放 0xb2 端口的访问权限
     if (ioperm(PORT, 1, 0)) {
