@@ -117,8 +117,10 @@ void smm_service() {
     smm_call(SMM_APP_MMI_SERVICE, 0, 0);
 }
 
-void smm_update(void *addr, size_t len) {
+void smm_update(char *filename, int modify_file) {
     // update here
+
+    printf("-----------------Vendor Starting Sign their new firmware------------\n");
     // 初始化 OpenSSL 库
     OpenSSL_add_all_algorithms();
     ERR_load_crypto_strings();
@@ -136,21 +138,17 @@ void smm_update(void *addr, size_t len) {
     unsigned char *n_buffer = malloc(RSA_N_LEN);
     unsigned char *e_buffer = malloc(RSA_E_LEN);
 
-    // char *modulus = BN_bn2hex(n); // 公钥模数 (n)
-    // char *exponent = BN_bn2hex(e); // 公钥指数 (e)
-    // size_t n_len = BN_num_bytes(n);
-    // size_t e_len = BN_num_bytes(e);
     size_t n_len = BN_bn2bin(n, n_buffer);
     size_t e_len = BN_bn2bin(e, e_buffer);
 
-    printf("Public Key:\n");
-    print_buffer(n_buffer, n_len);
-    printf("bin Modulus Length: %zu bytes\n", n_len);
-    print_buffer(e_buffer, e_len);
-    printf("bin Exponent Length: %zu bytes\n\n", e_len);
+    // printf("Public Key:\n");
+    // print_buffer(n_buffer, n_len);
+    // printf("bin Modulus Length: %zu bytes\n", n_len);
+    // print_buffer(e_buffer, e_len);
+    // printf("bin Exponent Length: %zu bytes\n\n", e_len);
 
     // 读取文件内容
-    FILE *file = fopen("input.txt", "rb");
+    FILE *file = fopen(filename, "rb");
     if (!file) {
         printf("Unable to open input.txt");
     }
@@ -187,6 +185,17 @@ void smm_update(void *addr, size_t len) {
     printf("\n");
     printf("Signature Length: %u bytes\n", signature_length);
 
+    printf("-----------------Vendor Finished Sign their new firmware------------\n");
+    
+    if (modify_file) {
+        printf("-----------------Hacker hack the firmware--------------\n");
+        file_data[0] = file_data[0] + 1;
+        printf("File Data:\n");
+        print_buffer(file_data, file_size);
+    }
+
+    printf("---------------SMM driver start to verify&update the firmware------------\n");
+
     struct SignedFile signed_file;
     memcpy(signed_file.signature, signature, signature_length);
     signed_file.signatureLen = signature_length;
@@ -198,20 +207,18 @@ void smm_update(void *addr, size_t len) {
     memcpy(public_key.E, e_buffer, e_len);
     public_key.ELen = e_len;
 
-
-
-
-    // uint64_t pa = virt_to_phys(addr);
-    // smm_call(SMM_APP_MMI_UPDATE, pa, len);
     uint64_t pa = virt_to_phys(&signed_file);
     uint64_t pb = virt_to_phys(&public_key);
     smm_call(SMM_APP_MMI_UPDATE, pa, pb);
+
+    printf("---------------SMM driver finished to verify&update the firmware------------\n");
+
+
 
     // 清理 OpenSSL 库
     EVP_cleanup();
     CRYPTO_cleanup_all_ex_data();
     ERR_free_strings();
-
     // 清理资源
     free(file_data);
     free(signature);
@@ -220,10 +227,20 @@ void smm_update(void *addr, size_t len) {
     free(n_buffer);
     free(e_buffer);
     RSA_free(rsa);
-
 }
 
-int main() {
+int main( int argc, char *argv[] ) {
+    char filename[100];
+    int modify_file = 0;
+    if (argc < 2) {
+        printf("Usage: %s <filename> <is_modify_file>\n", argv[0]);
+        return 1;
+    }
+    strcpy(filename, argv[1]);
+    if (argc == 3) {
+        modify_file = 1;
+    }
+
     // 请求访问 0xb2 端口
     if (ioperm(PORT, 1, 1)) {
         perror("ioperm");
@@ -233,9 +250,11 @@ int main() {
     // 向 0xb2 端口写入 0x05
     // outb(0x05, 0xb2);
 
-    size_t val = 10;
-    size_t len = 1;
-    smm_update(&val, len);
+    printf("-------------call firmware service---------\n");
+    smm_service();
+
+    smm_update(filename, modify_file);
+    printf("-------------call firmware service---------\n");
     smm_service();
 
     // 释放 0xb2 端口的访问权限

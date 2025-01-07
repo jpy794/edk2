@@ -38,11 +38,13 @@ STATIC EFI_HANDLE mDispatchHandle;
 STATIC EFI_MM_CPU_IO_PROTOCOL *mMmCpuIo;
 STATIC EFI_SMM_CPU_PROTOCOL *mSmmCpu;
 
+
+char SERVICE_STR[MAX_FILE_LEN] = "old HELLO ^^^";
 STATIC
 EFI_STATUS
 EFIAPI
 HandleService(UINT64 Arg0, UINT64 Arg1) {
-    DEBUG((DEBUG_INFO, "smi: serving\n"));
+    DEBUG((DEBUG_INFO, "smi: service %s\n", SERVICE_STR));
     // TODO: fake a service here
     return EFI_SUCCESS;
 }
@@ -65,7 +67,20 @@ HandleUpdate(UINT64 Arg0, UINT64 Arg1) {
     // UINT8 signature[256];
     // result = VerifyPackage((VOID*)package, 32, signature, 256, RSA_N, rsa_n_len, RSA_E, rsa_e_len);
     result = VerifyPackage((VOID*)file->data, file->dataLen, file->signature, file->signatureLen, publicKey->N, publicKey->NLen, publicKey->E, publicKey->ELen);
-    DEBUG((DEBUG_INFO, "VerifyPackage result: %d\n", result));
+    DEBUG((DEBUG_INFO, "VerifyFirmware result: %d\n", result));
+    if (result) {
+
+        char new_str[MAX_FILE_LEN];
+        for (int i = 0; i < file->dataLen; i++) {
+            new_str[i] = file->data[i];
+        }
+        new_str[file->dataLen] = '\0';
+        AsciiStrCpyS(SERVICE_STR, MAX_FILE_LEN, new_str);
+
+        DEBUG((DEBUG_INFO, "smi: service verified and updated\n"));
+    } else {
+        DEBUG((DEBUG_INFO, "smi: service verification failed\n"));
+    }
 
     return EFI_SUCCESS;
 }
@@ -139,7 +154,7 @@ SmmAppMmi(
         return EFI_WARN_INTERRUPT_SOURCE_QUIESCED;
     }
 
-    DEBUG((DEBUG_INFO, "%a(): smi\n", __FUNCTION__));
+    // DEBUG((DEBUG_INFO, "%a(): smi\n", __FUNCTION__));
 
     Status = ReadSaveRegister(EFI_SMM_SAVE_STATE_REGISTER_RDI, &Rdi);
     if (EFI_ERROR(Status)) {
