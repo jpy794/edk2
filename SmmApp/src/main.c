@@ -14,8 +14,8 @@
 #define SMM_APP_MMI_UPDATE 0x02
 
 #define KEYLEN 2048
-#define RSA_N_LEN 256
-#define RSA_E_LEN 3
+#define RSA_N_LEN 1024
+#define RSA_E_LEN 10
 
 #define MAX_FILE_LEN 1024
 #define MAX_SIGNATURE_LEN 256
@@ -25,14 +25,14 @@ struct SignedFile {
     INTN signatureLen;
     UINT8 data[MAX_FILE_LEN];
     INTN dataLen;
-};
+} __attribute__((aligned(4096)));
 
 struct PublicKey {
     UINT8 N[RSA_N_LEN];
     INTN NLen;
     UINT8 E[RSA_E_LEN];
     INTN ELen;
-};
+} __attribute__((aligned(4096)));
 
 STATIC EFI_HANDLE mDispatchHandle;
 STATIC EFI_MM_CPU_IO_PROTOCOL *mMmCpuIo;

@@ -14,8 +14,8 @@
 
 // must be the same with smm driver
 #define KEYLEN 2048
-#define RSA_N_LEN 256
-#define RSA_E_LEN 3
+#define RSA_N_LEN 1024
+#define RSA_E_LEN 10
 
 #define MAX_FILE_LEN 1024
 #define MAX_SIGNATURE_LEN 256
@@ -25,14 +25,22 @@ struct SignedFile {
     size_t signatureLen;
     unsigned char data[MAX_FILE_LEN];
     size_t dataLen;
-};
+} __attribute__((aligned(4096)));
 
 struct PublicKey {
     unsigned char N[RSA_N_LEN];
     size_t NLen;
     unsigned char E[RSA_E_LEN];
     size_t ELen;
-};
+} __attribute__((aligned(4096)));
+
+// DEBUG print buffer
+void print_buffer(const unsigned char *buffer, size_t len) {
+    for (size_t i = 0; i < len; i++) {
+        printf("%02x", buffer[i]);
+    }
+    printf("\n");
+}
 
 
 #define PAGE_SIZE 4096
@@ -125,16 +133,21 @@ void smm_update(void *addr, size_t len) {
     const BIGNUM *n, *e;
     RSA_get0_key(rsa, &n, &e, NULL);
 
-    char *modulus = BN_bn2hex(n); // 公钥模数 (n)
-    char *exponent = BN_bn2hex(e); // 公钥指数 (e)
-    char n_len = BN_num_bytes(n);
-    char e_len = BN_num_bytes(e);
+    unsigned char *n_buffer = malloc(RSA_N_LEN);
+    unsigned char *e_buffer = malloc(RSA_E_LEN);
+
+    // char *modulus = BN_bn2hex(n); // 公钥模数 (n)
+    // char *exponent = BN_bn2hex(e); // 公钥指数 (e)
+    // size_t n_len = BN_num_bytes(n);
+    // size_t e_len = BN_num_bytes(e);
+    size_t n_len = BN_bn2bin(n, n_buffer);
+    size_t e_len = BN_bn2bin(e, e_buffer);
 
     printf("Public Key:\n");
-    printf("Modulus (n): %s\n", modulus);
-    printf("Modulus Length: %zu bytes\n", n_len);
-    printf("Exponent (e): %s\n", exponent);
-    printf("Exponent Length: %zu bytes\n\n", e_len);
+    print_buffer(n_buffer, n_len);
+    printf("bin Modulus Length: %zu bytes\n", n_len);
+    print_buffer(e_buffer, e_len);
+    printf("bin Exponent Length: %zu bytes\n\n", e_len);
 
     // 读取文件内容
     FILE *file = fopen("input.txt", "rb");
@@ -146,40 +159,44 @@ void smm_update(void *addr, size_t len) {
     long file_size = ftell(file);
     fseek(file, 0, SEEK_SET);
 
-    unsigned char *file_data = malloc(file_size);
+    unsigned char *file_data; //  = malloc(file_size);
+    posix_memalign(&file_data, 4096, file_size);
     if (!file_data) {
         printf("Memory allocation failed for file data");
     }
     fread(file_data, 1, file_size, file);
     fclose(file);
 
+    printf("File Data:\n");
+    print_buffer(file_data, file_size);
+    printf("File Data Length: %ld bytes\n\n", file_size);
     // 对文件内容进行签名
     unsigned char *signature = malloc(RSA_size(rsa));
     unsigned int signature_length;
 
     if (RSA_sign(NID_sha256, file_data, file_size, signature, &signature_length, rsa) != 1) {
         printf("RSA signing failed");
+        ERR_print_errors_fp(stderr);
     }
 
     printf("Signature:\n");
-    for (unsigned int i = 0; i < signature_length; i++) {
-        printf("%02x", signature[i]);
-    }
+    print_buffer(signature, signature_length);
+    // modified signature
+    // signature[0] = 'a';
+
     printf("\n");
     printf("Signature Length: %u bytes\n", signature_length);
 
-    struct SignedFile signed_file = {
-        .signature = signature,
-        .signatureLen = (size_t)signature_length,
-        .data = file_data,
-        .dataLen = (size_t)file_size
-    };
-    struct PublicKey public_key = {
-        .N = modulus,
-        .NLen = n_len,
-        .E = exponent,
-        .ELen = e_len
-    };
+    struct SignedFile signed_file;
+    memcpy(signed_file.signature, signature, signature_length);
+    signed_file.signatureLen = signature_length;
+    memcpy(signed_file.data, file_data, file_size);
+    signed_file.dataLen = file_size;
+    struct PublicKey public_key;
+    memcpy(public_key.N, n_buffer, n_len);
+    public_key.NLen = n_len;
+    memcpy(public_key.E, e_buffer, e_len);
+    public_key.ELen = e_len;
 
 
 
@@ -198,8 +215,10 @@ void smm_update(void *addr, size_t len) {
     // 清理资源
     free(file_data);
     free(signature);
-    free(modulus);
-    free(exponent);
+    // free(modulus);
+    // free(exponent);
+    free(n_buffer);
+    free(e_buffer);
     RSA_free(rsa);
 
 }

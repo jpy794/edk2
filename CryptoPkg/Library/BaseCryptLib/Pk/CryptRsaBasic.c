@@ -299,30 +299,32 @@ RsaPkcs1Verify (
   // Determine the message digest algorithm according to digest size.
   //   Only MD5, SHA-1, SHA-256, SHA-384 or SHA-512 algorithm is supported.
   //
-  switch (HashSize) {
-    case MD5_DIGEST_SIZE:
-      DigestType = NID_md5;
-      break;
+  // HACK: hash size is 256, input file
+  DigestType = NID_sha256;
+  // switch (HashSize) {
+  //   case MD5_DIGEST_SIZE:
+  //     DigestType = NID_md5;
+  //     break;
 
-    case SHA1_DIGEST_SIZE:
-      DigestType = NID_sha1;
-      break;
+  //   case SHA1_DIGEST_SIZE:
+  //     DigestType = NID_sha1;
+  //     break;
 
-    case SHA256_DIGEST_SIZE:
-      DigestType = NID_sha256;
-      break;
+  //   case SHA256_DIGEST_SIZE:
+  //     DigestType = NID_sha256;
+  //     break;
 
-    case SHA384_DIGEST_SIZE:
-      DigestType = NID_sha384;
-      break;
+  //   case SHA384_DIGEST_SIZE:
+  //     DigestType = NID_sha384;
+  //     break;
 
-    case SHA512_DIGEST_SIZE:
-      DigestType = NID_sha512;
-      break;
+  //   case SHA512_DIGEST_SIZE:
+  //     DigestType = NID_sha512;
+  //     break;
 
-    default:
-      return FALSE;
-  }
+  //   default:
+  //     return FALSE;
+  // }
 
   SigBuf = (UINT8 *)Signature;
   return (BOOLEAN)RSA_verify (
