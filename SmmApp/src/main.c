@@ -6,10 +6,33 @@
 #include <Protocol/MmCpuIo.h>            // EFI_MM_CPU_IO_PROTOCOL
 #include <Protocol/SmmCpu.h>             // EFI_SMM_CPU_PROTOCOL
 
+#include "crypto.h"
+
 #define ICH9_APM_CNT_SMM_APP 0x05
 
 #define SMM_APP_MMI_SERVICE 0x01
 #define SMM_APP_MMI_UPDATE 0x02
+
+#define KEYLEN 2048
+#define RSA_N_LEN 256
+#define RSA_E_LEN 3
+
+#define MAX_FILE_LEN 1024
+#define MAX_SIGNATURE_LEN 256
+
+struct SignedFile {
+    UINT8 signature[MAX_SIGNATURE_LEN];
+    INTN signatureLen;
+    UINT8 data[MAX_FILE_LEN];
+    INTN dataLen;
+};
+
+struct PublicKey {
+    UINT8 N[RSA_N_LEN];
+    INTN NLen;
+    UINT8 E[RSA_E_LEN];
+    INTN ELen;
+};
 
 STATIC EFI_HANDLE mDispatchHandle;
 STATIC EFI_MM_CPU_IO_PROTOCOL *mMmCpuIo;
@@ -30,6 +53,20 @@ EFIAPI
 HandleUpdate(UINT64 Arg0, UINT64 Arg1) {
     DEBUG((DEBUG_INFO, "smi: updating\n"));
     // TODO: do service update here
+    BOOLEAN result;
+    struct SignedFile *file = (struct SignedFile*)Arg0;
+
+    // TODO: change this
+    struct PublicKey *publicKey = (struct PublicKey*)Arg1;
+    // UINT8 RSA_N[RSA_N_LEN];
+    // UINT8 RSA_E[RSA_E_LEN];
+    
+    // char package[32];
+    // UINT8 signature[256];
+    // result = VerifyPackage((VOID*)package, 32, signature, 256, RSA_N, rsa_n_len, RSA_E, rsa_e_len);
+    result = VerifyPackage((VOID*)file->data, file->dataLen, file->signature, file->signatureLen, publicKey->N, publicKey->NLen, publicKey->E, publicKey->ELen);
+    DEBUG((DEBUG_INFO, "VerifyPackage result: %d\n", result));
+
     return EFI_SUCCESS;
 }
 

@@ -8,16 +8,23 @@
 
 [Sources]
   src/main.c
+  src/crypto.c
 
 [Packages]
   MdePkg/MdePkg.dec
   OvmfPkg/OvmfPkg.dec
+  CryptoPkg/CryptoPkg.dec
 
 [LibraryClasses]
   DebugLib
   MmServicesTableLib
   SmmServicesTableLib
   UefiDriverEntryPoint
+
+[LibraryClasses.common.DXE_SMM_DRIVER]
+  BaseCryptLib
+  OpensslLib
+  IntrinsicLib
 
 [Protocols]
   gEfiMmCpuIoProtocolGuid

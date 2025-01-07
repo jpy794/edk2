@@ -4,6 +4,37 @@
 #include <sys/io.h>
 #include <unistd.h>
 
+// RSA
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <openssl/rsa.h>
+#include <openssl/pem.h>
+#include <openssl/err.h>
+
+// must be the same with smm driver
+#define KEYLEN 2048
+#define RSA_N_LEN 256
+#define RSA_E_LEN 3
+
+#define MAX_FILE_LEN 1024
+#define MAX_SIGNATURE_LEN 256
+
+struct SignedFile {
+    unsigned char signature[MAX_SIGNATURE_LEN];
+    size_t signatureLen;
+    unsigned char data[MAX_FILE_LEN];
+    size_t dataLen;
+};
+
+struct PublicKey {
+    unsigned char N[RSA_N_LEN];
+    size_t NLen;
+    unsigned char E[RSA_E_LEN];
+    size_t ELen;
+};
+
+
 #define PAGE_SIZE 4096
 #define PAGE_SHIFT 12
 
@@ -79,8 +110,98 @@ void smm_service() {
 }
 
 void smm_update(void *addr, size_t len) {
-    uint64_t pa = virt_to_phys(addr);
-    smm_call(SMM_APP_MMI_UPDATE, pa, len);
+    // update here
+    // 初始化 OpenSSL 库
+    OpenSSL_add_all_algorithms();
+    ERR_load_crypto_strings();
+
+    // 生成 RSA 密钥对
+    RSA *rsa = RSA_generate_key(2048, 65537, NULL, NULL);
+    if (!rsa) {
+        printf("RSA key generation failed");
+    }
+
+    // 提取公钥信息
+    const BIGNUM *n, *e;
+    RSA_get0_key(rsa, &n, &e, NULL);
+
+    char *modulus = BN_bn2hex(n); // 公钥模数 (n)
+    char *exponent = BN_bn2hex(e); // 公钥指数 (e)
+    char n_len = BN_num_bytes(n);
+    char e_len = BN_num_bytes(e);
+
+    printf("Public Key:\n");
+    printf("Modulus (n): %s\n", modulus);
+    printf("Modulus Length: %zu bytes\n", n_len);
+    printf("Exponent (e): %s\n", exponent);
+    printf("Exponent Length: %zu bytes\n\n", e_len);
+
+    // 读取文件内容
+    FILE *file = fopen("input.txt", "rb");
+    if (!file) {
+        printf("Unable to open input.txt");
+    }
+
+    fseek(file, 0, SEEK_END);
+    long file_size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    unsigned char *file_data = malloc(file_size);
+    if (!file_data) {
+        printf("Memory allocation failed for file data");
+    }
+    fread(file_data, 1, file_size, file);
+    fclose(file);
+
+    // 对文件内容进行签名
+    unsigned char *signature = malloc(RSA_size(rsa));
+    unsigned int signature_length;
+
+    if (RSA_sign(NID_sha256, file_data, file_size, signature, &signature_length, rsa) != 1) {
+        printf("RSA signing failed");
+    }
+
+    printf("Signature:\n");
+    for (unsigned int i = 0; i < signature_length; i++) {
+        printf("%02x", signature[i]);
+    }
+    printf("\n");
+    printf("Signature Length: %u bytes\n", signature_length);
+
+    struct SignedFile signed_file = {
+        .signature = signature,
+        .signatureLen = (size_t)signature_length,
+        .data = file_data,
+        .dataLen = (size_t)file_size
+    };
+    struct PublicKey public_key = {
+        .N = modulus,
+        .NLen = n_len,
+        .E = exponent,
+        .ELen = e_len
+    };
+
+
+
+
+    // uint64_t pa = virt_to_phys(addr);
+    // smm_call(SMM_APP_MMI_UPDATE, pa, len);
+    uint64_t pa = virt_to_phys(&signed_file);
+    uint64_t pb = virt_to_phys(&public_key);
+    smm_call(SMM_APP_MMI_UPDATE, pa, pb);
+
+    // 清理 OpenSSL 库
+    EVP_cleanup();
+    CRYPTO_cleanup_all_ex_data();
+    ERR_free_strings();
+
+    // 清理资源
+    free(file_data);
+    free(signature);
+    free(modulus);
+    free(exponent);
+    RSA_free(rsa);
+
 }
 
 int main() {
